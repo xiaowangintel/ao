@@ -320,3 +320,226 @@ class MXFP8TrainingWeightWrapperTensor(TrainingWeightWrapperBaseTensor):
             # the wrapping behavior of the super() impl, go directly to dispatch
             with torch._C.DisableTorchFunctionSubclass():
                 return func(*args, **kwargs)
+
+
+# Ops that should preserve the InferenceWeightOnlyWrapperTensor subclass
+_wo_ops_to_preserve_subclass = {
+    torch.ops.aten.empty_like.default,
+    torch.ops.aten.new_zeros.default,
+    torch.ops.aten.slice.Tensor,
+    torch.ops.aten.copy_.default,
+    torch.ops.aten.view.default,
+    torch.ops.aten.as_strided.default,
+    torch.ops.aten._to_copy.default,
+    torch.ops.aten._pin_memory.default,
+    torch.ops.aten.split.Tensor,
+    torch.ops.aten.clone.default,
+    torch.ops.aten.transpose.int,
+    torch.ops.aten.t.default,
+    torch.ops.aten.detach.default,
+}
+
+
+class InferenceWeightOnlyWrapperTensor(TorchAOBaseTensor):
+    """
+    Abstract base class for inference weight-only quantization tensor subclasses.
+
+    Mirrors TrainingWeightWrapperBaseTensor but wraps a *quantized* inner tensor
+    (``_data``) instead of a high-precision one.  Concrete subclasses must
+    implement ``from_hp`` and ``dequantize``.
+
+    Attributes:
+        _data: The quantized inner tensor (type varies by subclass).
+        config: Quantization configuration object.
+    """
+
+    @staticmethod
+    def __new__(
+        cls,
+        data: torch.Tensor,
+        config,
+    ):
+        shape = data.shape
+        self = torch.Tensor._make_wrapper_subclass(
+            cls,
+            shape,
+            dtype=data.dtype,
+            device=data.device,
+            requires_grad=False,
+        )
+        return self
+
+    def __init__(
+        self,
+        data: torch.Tensor,
+        config,
+    ):
+        self._data = data
+        self.config = config
+
+    @classmethod
+    def from_hp(cls, hp_tensor: torch.Tensor, config):
+        raise NotImplementedError(
+            f"{cls.__name__} must implement from_hp()"
+        )
+
+    def dequantize(self) -> torch.Tensor:
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement dequantize()"
+        )
+
+    @classmethod
+    def __torch_function__(cls, func, types, args, kwargs={}):
+        raise NotImplementedError(
+            f"{cls.__name__} not intended to be used directly, "
+            "please override __torch_function__ in a subclass."
+        )
+
+    @classmethod
+    def __torch_dispatch__(cls, func, types, args, kwargs={}):
+        config = None
+
+        def unwrap(t):
+            nonlocal config
+            if config is None:
+                config = t.config
+            return t.dequantize()
+
+        if func == torch.ops.aten.detach.default:
+            t = args[0]
+            return cls(t._data, t.config)
+
+        args_unwrapped, kwargs_unwrapped = pytree.tree_map_only(
+            cls, unwrap, (args, kwargs or {})
+        )
+
+        out = func(*args_unwrapped, **kwargs_unwrapped)
+
+        if func not in _wo_ops_to_preserve_subclass:
+            return out
+
+        def rewrap(t):
+            if isinstance(t, torch.Tensor) and t.ndim == 3:
+                return cls.from_hp(t, config)
+            return t
+
+        return pytree.tree_map_only(torch.Tensor, rewrap, out)
+
+    def __repr__(self):
+        return (
+            f"{type(self).__name__}(data={self._data}, config={self.config})"
+        )
+
+    def __tensor_flatten__(self):
+        return ["_data"], {"config": self.config}
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls, inner_tensors, flatten_spec, outer_size, outer_stride
+    ):
+        return cls(inner_tensors["_data"], flatten_spec["config"])
+
+
+class Float8InferenceWeightOnlyWrapperTensor(InferenceWeightOnlyWrapperTensor):
+    """
+    Float8 weight-only quantization for MoE expert weights.
+
+    Composes a ``Float8Tensor`` as the inner ``_data``.  Weights are
+    pre-quantized to FP8 at setup time; during forward, activations are
+    dynamically quantized and ``torch._scaled_grouped_mm`` is used.
+    """
+
+    @classmethod
+    def from_hp(
+        cls,
+        hp_tensor: torch.Tensor,
+        config,
+    ) -> "Float8InferenceWeightOnlyWrapperTensor":
+        from torchao.quantization.granularity import PerRow
+        from torchao.quantization.quantize_.workflows.float8.float8_tensor import (
+            Float8Tensor,
+        )
+
+        assert hp_tensor.ndim == 3, (
+            f"Weight must be 3D, got {hp_tensor.ndim}D"
+        )
+
+        float8_dtype = config.weight_dtype
+
+        # Delegate quantization to Float8Tensor with PerRow(dim=-2).
+        # For shape (E, K, N), this gives scale shape (E, 1, N) — axiswise
+        # along the K dimension.
+        float8_tensor = Float8Tensor.from_hp(
+            hp_tensor,
+            float8_dtype=float8_dtype,
+            granularity=PerRow(dim=-2),
+        )
+
+        # Enforce column-major layout (stride(-2)==1) on qdata as required
+        # by torch._scaled_grouped_mm for the right operand.
+        qdata_cm = (
+            float8_tensor.qdata
+            .transpose(-2, -1)
+            .contiguous()
+            .transpose(-2, -1)
+        )
+
+        float8_tensor_cm = Float8Tensor(
+            qdata_cm,
+            float8_tensor.scale,
+            block_size=float8_tensor.block_size,
+            mm_config=float8_tensor.mm_config,
+            act_quant_kwargs=float8_tensor.act_quant_kwargs,
+            kernel_preference=float8_tensor.kernel_preference,
+            dtype=float8_tensor.dtype,
+        )
+
+        return cls(float8_tensor_cm, config)
+
+    def dequantize(self) -> torch.Tensor:
+        return self._data.dequantize()
+
+    @classmethod
+    def __torch_function__(cls, func, types, args, kwargs={}):
+        if func.__name__ == "_grouped_mm":
+            A, B = args[0], args[1]
+
+            assert not isinstance(A, cls), f"A should not be a {cls.__name__}"
+            assert isinstance(B, cls), f"B should be a {cls.__name__}"
+
+            config = B.config
+            offs = kwargs.get("offs", None)
+
+            A_is_2d = A.ndim == 2
+            B_is_2d_or_3d = B.ndim == 2 or B.ndim == 3
+
+            if A_is_2d and B_is_2d_or_3d and offs is not None:
+                from torchao.quantization.granularity import PerRow
+                from torchao.quantization.quantize_.workflows.float8.float8_tensor import (
+                    Float8Tensor,
+                )
+
+                from torchao.prototype.moe_training.fp8_grouped_mm import (
+                    _Float8GroupedMM,
+                )
+
+                # Quantize A to Float8Tensor (per-row scales).
+                A_f8 = Float8Tensor.from_hp(
+                    A,
+                    float8_dtype=config.weight_dtype,
+                    granularity=PerRow(),
+                )
+                B_f8 = B._data  # already Float8Tensor
+
+                return _Float8GroupedMM.apply(
+                    A_f8,
+                    B_f8,
+                    offs,
+                    config.out_dtype,
+                    config.weight_dtype,
+                    config.pad_token_groups_for_grouped_mm,
+                )
+
+        else:
+            with torch._C.DisableTorchFunctionSubclass():
+                return func(*args, **kwargs)

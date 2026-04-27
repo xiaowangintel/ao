@@ -1,0 +1,18 @@
+{
+  "model": "gpt_oss",
+  "status": "PASS",
+  "device": "xpu",
+  "baseline_shape": [
+    1,
+    16,
+    1000
+  ],
+  "sqnr_db": 25.589065551757812,
+  "cosine_similarity": 0.9986194968223572,
+  "max_abs_error": 0.07421875,
+  "mean_abs_error": 0.013340490870177746,
+  "dispatch_count": 6,
+  "expected_dispatches": 6,
+  "dispatch_match": true,
+  "elapsed_seconds": 0.19
+}

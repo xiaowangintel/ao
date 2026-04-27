@@ -44,6 +44,17 @@ class TrainingOpBaseConfig(AOBaseConfig):
     pass
 
 
+class InferenceOpBaseConfig(AOBaseConfig):
+    """
+    Base configuration for low precision inference. Not intended to be used directly.
+
+    Purpose is to support generic model conversion function for linear and grouped gemm
+    low precision inference (e.g., weight-only quantization).
+    """
+
+    pass
+
+
 @register_as_pytree_constant
 @dataclass
 class Float8TrainingOpConfig(TrainingOpBaseConfig):
@@ -186,6 +197,82 @@ class MXFP8TrainingOpConfig(TrainingOpBaseConfig):
                 self.pad_token_groups_for_grouped_mm,
             )
         )
+
+
+class Float8WeightOnlyMoERecipe(Enum):
+    """FP8 recipes for weight-only quantization of MoE expert weights."""
+
+    FP8_ROWWISE = "fp8_rowwise"
+
+
+@register_as_pytree_constant
+@dataclass
+class Float8WeightOnlyMoEConfig(InferenceOpBaseConfig):
+    """
+    Configuration for Float8 weight-only quantization of MoE expert weights.
+
+    Weights are pre-quantized to FP8 at setup time for memory savings.
+    During forward, activations are dynamically quantized to FP8, and
+    torch._scaled_grouped_mm is used for compute with both FP8 operands.
+
+    Args:
+        weight_dtype: FP8 dtype for weight storage. Default is torch.float8_e4m3fn.
+        out_dtype: Output dtype of the grouped mm operation. Default is torch.bfloat16.
+        pad_token_groups_for_grouped_mm: Whether to pad token group sizes to multiples of 16.
+            On AMD/ROCm this must be False because the CUDA padding kernel is unavailable.
+    """
+
+    weight_dtype: torch.dtype = (
+        torch.float8_e4m3fnuz if is_MI300() else torch.float8_e4m3fn
+    )
+    out_dtype: Optional[torch.dtype] = torch.bfloat16
+    pad_token_groups_for_grouped_mm: bool = False
+
+    @classmethod
+    def from_recipe(
+        cls,
+        recipe: Float8WeightOnlyMoERecipe,
+    ) -> "Float8WeightOnlyMoEConfig":
+        """Factory method to create a Float8WeightOnlyMoEConfig from a recipe."""
+        if recipe == Float8WeightOnlyMoERecipe.FP8_ROWWISE:
+            return cls()
+        else:
+            raise ValueError(f"Unsupported FP8 weight-only recipe: {recipe}")
+
+    def __eq__(self, other):
+        if isinstance(other, Float8WeightOnlyMoEConfig):
+            return (
+                self.weight_dtype == other.weight_dtype
+                and self.out_dtype == other.out_dtype
+                and self.pad_token_groups_for_grouped_mm
+                == other.pad_token_groups_for_grouped_mm
+            )
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(
+            (
+                self.weight_dtype,
+                self.out_dtype,
+                self.pad_token_groups_for_grouped_mm,
+            )
+        )
+
+
+@register_quantize_module_handler(Float8WeightOnlyMoEConfig)
+def _moe_weight_only_transform(
+    module: nn.Module,
+    config: Float8WeightOnlyMoEConfig,
+    parameter_name: Optional[str] = None,
+) -> nn.Module:
+    """
+    Swaps `torch.nn.Parameter` data tensor with Float8InferenceWeightOnlyWrapperTensor
+    for weight-only FP8 quantization of MoE expert weights.
+    """
+    from torchao.prototype.moe_training.conversion_utils import _swap_params
+
+    out = _swap_params(module, config=config, target_parameter_name=parameter_name)
+    return out
 
 
 @register_quantize_module_handler(Float8TrainingOpConfig)

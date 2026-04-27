@@ -1,0 +1,18 @@
+{
+  "model": "deepseek_v2",
+  "status": "PASS",
+  "device": "xpu",
+  "baseline_shape": [
+    1,
+    16,
+    1000
+  ],
+  "sqnr_db": 45.50373840332031,
+  "cosine_similarity": 0.9999860525131226,
+  "max_abs_error": 0.0078125,
+  "mean_abs_error": 0.001238056574948132,
+  "dispatch_count": 6,
+  "expected_dispatches": 6,
+  "dispatch_match": true,
+  "elapsed_seconds": 2.08
+}

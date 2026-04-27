@@ -1,0 +1,18 @@
+{
+  "model": "qwen3_5_moe",
+  "status": "PASS",
+  "device": "xpu",
+  "baseline_shape": [
+    1,
+    16,
+    1000
+  ],
+  "sqnr_db": 19.49864959716797,
+  "cosine_similarity": 0.9943850636482239,
+  "max_abs_error": 0.287109375,
+  "mean_abs_error": 0.020220158621668816,
+  "dispatch_count": 6,
+  "expected_dispatches": 6,
+  "dispatch_match": true,
+  "elapsed_seconds": 0.19
+}
