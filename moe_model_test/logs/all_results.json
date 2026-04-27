@@ -1,0 +1,1085 @@
+[
+  {
+    "model": "deepseek_v2",
+    "model_class": "DeepseekV2ForCausalLM",
+    "config_class": "DeepseekV2Config",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.2031,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                64,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                64,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                64,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                64,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                64,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                64,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.2031,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 45.4,
+      "cosine_similarity": 0.999986,
+      "max_abs_error": 0.007812,
+      "mean_abs_error": 0.001264
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 2.66
+  },
+  {
+    "model": "deepseek_v3",
+    "model_class": "DeepseekV3ForCausalLM",
+    "config_class": "DeepseekV3Config",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.25,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                256,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                256,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                256,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                256,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                256,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                256,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.2422,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 31.13,
+      "cosine_similarity": 0.999615,
+      "max_abs_error": 0.102783,
+      "mean_abs_error": 0.004896
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.63
+  },
+  {
+    "model": "gpt_oss",
+    "model_class": "GptOssForCausalLM",
+    "config_class": "GptOssConfig",
+    "is_gptoss": true,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.5703,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                1024
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                512,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "gate_up_proj_bias": {
+              "shape": [
+                4,
+                1024
+              ],
+              "is_woq": false,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj_bias": {
+              "shape": [
+                4,
+                256
+              ],
+              "is_woq": false,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                1024
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                512,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "gate_up_proj_bias": {
+              "shape": [
+                4,
+                1024
+              ],
+              "is_woq": false,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj_bias": {
+              "shape": [
+                4,
+                256
+              ],
+              "is_woq": false,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                1024
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                512,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "gate_up_proj_bias": {
+              "shape": [
+                4,
+                1024
+              ],
+              "is_woq": false,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj_bias": {
+              "shape": [
+                4,
+                256
+              ],
+              "is_woq": false,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.5938,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 25.59,
+      "cosine_similarity": 0.998619,
+      "max_abs_error": 0.074219,
+      "mean_abs_error": 0.01334
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.2
+  },
+  {
+    "model": "qwen2_moe",
+    "model_class": "Qwen2MoeForCausalLM",
+    "config_class": "Qwen2MoeConfig",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.2734,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.2734,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 36.43,
+      "cosine_similarity": 0.999886,
+      "max_abs_error": 0.046875,
+      "mean_abs_error": 0.003027
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.11
+  },
+  {
+    "model": "qwen3_moe",
+    "model_class": "Qwen3MoeForCausalLM",
+    "config_class": "Qwen3MoeConfig",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.2266,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.2266,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 40.5,
+      "cosine_similarity": 0.999955,
+      "max_abs_error": 0.012695,
+      "mean_abs_error": 0.002428
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.05
+  },
+  {
+    "model": "qwen3_5_moe",
+    "model_class": "Qwen3_5MoeForCausalLM",
+    "config_class": "Qwen3_5MoeTextConfig",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.5312,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.5391,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 19.5,
+      "cosine_similarity": 0.994385,
+      "max_abs_error": 0.287109,
+      "mean_abs_error": 0.02022
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.2
+  },
+  {
+    "model": "qwen3_next",
+    "model_class": "Qwen3NextForCausalLM",
+    "config_class": "Qwen3NextConfig",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.5625,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.5625,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 18.98,
+      "cosine_similarity": 0.993668,
+      "max_abs_error": 0.320312,
+      "mean_abs_error": 0.019732
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.14
+  },
+  {
+    "model": "qwen3_vl_moe",
+    "model_class": "Qwen3VLMoeTextModel",
+    "config_class": "Qwen3VLMoeTextConfig",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      256
+    ],
+    "baseline_abs_max": 3.8438,
+    "quantization": {
+      "experts": [
+        {
+          "name": "layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                4,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                4,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      256
+    ],
+    "expected_abs_max": 3.8438,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 33.41,
+      "cosine_similarity": 0.999772,
+      "max_abs_error": 0.195312,
+      "mean_abs_error": 0.013111
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.04
+  },
+  {
+    "model": "mistral4",
+    "model_class": "Mistral4ForCausalLM",
+    "config_class": "Mistral4Config",
+    "is_gptoss": false,
+    "device": "xpu",
+    "seq_len": 16,
+    "passed": true,
+    "errors": [],
+    "baseline_shape": [
+      1,
+      16,
+      1000
+    ],
+    "baseline_abs_max": 1.1875,
+    "quantization": {
+      "experts": [
+        {
+          "name": "model.layers.0.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                128,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                128,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.1.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                128,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                128,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        },
+        {
+          "name": "model.layers.2.mlp.experts",
+          "params": {
+            "gate_up_proj": {
+              "shape": [
+                128,
+                256,
+                384
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            },
+            "down_proj": {
+              "shape": [
+                128,
+                192,
+                256
+              ],
+              "is_woq": true,
+              "dtype": "torch.bfloat16"
+            }
+          }
+        }
+      ]
+    },
+    "num_experts_patched": 3,
+    "expected_shape": [
+      1,
+      16,
+      1000
+    ],
+    "expected_abs_max": 1.1719,
+    "dispatch": {
+      "float8_grouped_mm_count": 6,
+      "expected_count": 6,
+      "dispatch_correct": true
+    },
+    "accuracy": {
+      "sqnr_db": 34.48,
+      "cosine_similarity": 0.999822,
+      "max_abs_error": 0.052734,
+      "mean_abs_error": 0.003811
+    },
+    "thresholds": {
+      "sqnr_threshold": 18.0,
+      "sqnr_pass": true,
+      "cosine_threshold": 0.99,
+      "cosine_pass": true,
+      "dispatch_pass": true
+    },
+    "elapsed_seconds": 0.3
+  }
+]
