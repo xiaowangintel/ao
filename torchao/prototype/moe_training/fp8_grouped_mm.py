@@ -64,7 +64,14 @@ def _to_fp8_rowwise_then_scaled_grouped_mm(
 
 
 class _Float8GroupedMM(torch.autograd.Function):
-    """Differentiable implementation of grouped GEMM with dynamic float8 quantization."""
+    """Differentiable implementation of grouped GEMM with dynamic float8 quantization.
+
+    Supports two modes:
+    1. Dynamic quantization (default): Both A and B_t are quantized to FP8 at forward time.
+    2. Weight-only quantization (inference-only): B_t is a Float8Tensor (pre-quantized).
+       Only A is dynamically quantized. Intended for use under torch.no_grad() /
+       torch.inference_mode().
+    """
 
     @staticmethod
     def forward(
@@ -76,9 +83,17 @@ class _Float8GroupedMM(torch.autograd.Function):
         float8_dtype: torch.dtype = torch.float8_e4m3fn,
         pad_token_groups_for_grouped_mm: bool = True,
     ) -> torch.Tensor:
+        from torchao.quantization.quantize_.workflows.float8.float8_tensor import (
+            Float8Tensor,
+        )
+
         assert not pad_token_groups_for_grouped_mm, (
             "pad_token_groups_for_grouped_mm=True is not yet supported"
         )
+        # Determine if inputs are pre-quantized (Float8Tensor).
+        a_pre_quantized = isinstance(A, Float8Tensor)
+        pre_quantized = isinstance(B_t, Float8Tensor)
+
         # torchao _quantize_then_scaled_grouped_mm only supports A=2D|3D and B=3D.
         assert A.ndim == 2 or A.ndim == 3, "A must be 2D or 3D"
         assert B_t.ndim == 3, "B must be 3D"
@@ -90,13 +105,15 @@ class _Float8GroupedMM(torch.autograd.Function):
             f"B must have last 2 dims divisible by 16, but got shape: {B_t.shape}"
         )
 
-        # Assert input tensors are in high-precision dtypes.
-        assert A.dtype == torch.float32 or A.dtype == torch.bfloat16, (
-            "A must be float32 or bfloat16"
-        )
-        assert B_t.dtype == torch.float32 or B_t.dtype == torch.bfloat16, (
-            "B must be float32 or bfloat16"
-        )
+        # Assert input tensors are in high-precision dtypes (unless pre-quantized).
+        if not a_pre_quantized:
+            assert A.dtype == torch.float32 or A.dtype == torch.bfloat16, (
+                "A must be float32 or bfloat16"
+            )
+        if not pre_quantized:
+            assert B_t.dtype == torch.float32 or B_t.dtype == torch.bfloat16, (
+                "B must be float32 or bfloat16"
+            )
         assert offs is None or offs.dtype == torch.int32, (
             "offs must be int32 tensor or None"
         )
@@ -110,7 +127,8 @@ class _Float8GroupedMM(torch.autograd.Function):
         assert not _is_column_major(A), "A must be row-major"
 
         # Due to hardware requirements, the right operand in a scaled grouped GEMM must be column-major.
-        assert _is_column_major(B_t), "B must be column-major"
+        if not pre_quantized:
+            assert _is_column_major(B_t), "B must be column-major"
 
         # Save original group_end_offsets and num_tokens before padding
         num_tokens = A.shape[0]
@@ -129,30 +147,50 @@ class _Float8GroupedMM(torch.autograd.Function):
             padded_group_end_offsets = offs
 
         # Convert high precision input tensor to float8, row-major for left operand of grouped GEMM.
-        # Uses fused Triton kernel that computes per-row absmax + scale + FP8 cast
-        # in a single kernel launch (replaces 3 separate ops: tensor_to_scale,
-        # multiply by scale, and to_fp8_saturated).
-        # padded_A shape: (M, K) or (padded_M, K) if padding was used
-        # A_scales shape: (M, 1) or (padded_M, 1) if padding was used
-        A_data_row_major, A_scales = triton_fp8_rowwise_2d_scale_and_cast(
-            padded_A,
-            output_dtype=float8_dtype,
-            round_scales_to_power_of_2=True,
-        )
+        if a_pre_quantized:
+            # A is already Float8Tensor — extract qdata and scale.
+            A_data_row_major = A.qdata
+            # Float8Tensor uses standard scale convention (amax / fp8_max).
+            # Convert to reciprocal convention so the double-reciprocal in
+            # _scaled_grouped_mm yields the correct standard scale.
+            A_scales = A.scale.reciprocal()
+        else:
+            # Uses fused Triton kernel that computes per-row absmax + scale + FP8 cast
+            # in a single kernel launch (replaces 3 separate ops: tensor_to_scale,
+            # multiply by scale, and to_fp8_saturated).
+            # padded_A shape: (M, K) or (padded_M, K) if padding was used
+            # A_scales shape: (M, 1) or (padded_M, 1) if padding was used
+            A_data_row_major, A_scales = triton_fp8_rowwise_2d_scale_and_cast(
+                padded_A,
+                output_dtype=float8_dtype,
+                round_scales_to_power_of_2=True,
+            )
 
         # Convert B to float8, column-major for right operand of grouped GEMM.
-        # B_t shape: (E, K, N)
-        # B_t scales must be computed rowwise keeping the outer/final dim, so:
-        # B_t_scales shape: (E, 1, N)
-        B_t_scales = tensor_to_scale(
-            B_t,
-            float8_dtype,
-            scaling_granularity=ScalingGranularity.AXISWISE,
-            axiswise_dim=-2,
-            round_scales_to_power_of_2=True,
-        )
-        B_t_scaled = B_t.to(torch.float32) * B_t_scales
-        B_t_data_col_major = to_fp8_saturated(B_t_scaled, float8_dtype)
+        # In weight-only mode, B is already pre-quantized; use provided data and scales.
+        if pre_quantized:
+            B_t_data_col_major = B_t.qdata
+            # Float8Tensor uses standard scale convention (amax / fp8_max).
+            # _scaled_grouped_mm expects standard convention passed through
+            # .reciprocal() below. Convert to reciprocal convention here so
+            # the double-reciprocal yields the correct standard scale.
+            B_t_scales = B_t.scale.reciprocal()
+            assert _is_column_major(B_t_data_col_major), (
+                "Pre-quantized B must be column-major"
+            )
+        else:
+            # B_t shape: (E, K, N)
+            # B_t scales must be computed rowwise keeping the outer/final dim, so:
+            # B_t_scales shape: (E, 1, N)
+            B_t_scales = tensor_to_scale(
+                B_t,
+                float8_dtype,
+                scaling_granularity=ScalingGranularity.AXISWISE,
+                axiswise_dim=-2,
+                round_scales_to_power_of_2=True,
+            )
+            B_t_scaled = B_t.to(torch.float32) * B_t_scales
+            B_t_data_col_major = to_fp8_saturated(B_t_scaled, float8_dtype)
 
         # Store what we need for backward.
         ctx.save_for_backward(
@@ -177,15 +215,24 @@ class _Float8GroupedMM(torch.autograd.Function):
         # B_t_scales shape: (E, 1, N)
         A_scales = A_scales.squeeze(-1)
         B_t_scales = B_t_scales.squeeze(1)
-        output = torch._scaled_grouped_mm(
-            A_data_row_major,
-            B_t_data_col_major,
-            A_scales.reciprocal(),  # Reciprocals are needed for rescaling the output.
-            B_t_scales.reciprocal(),
-            padded_group_end_offsets,
-            out_dtype=out_dtype,
-            use_fast_accum=True,
-        )
+
+        # Device dispatch: _scaled_grouped_mm (CUDA) or dequant + _grouped_mm (XPU/CPU).
+        device = A_data_row_major.device
+        try:
+            output = torch._scaled_grouped_mm(
+                A_data_row_major,
+                B_t_data_col_major,
+                A_scales.reciprocal(),
+                B_t_scales.reciprocal(),
+                padded_group_end_offsets,
+                out_dtype=out_dtype,
+                use_fast_accum=True,
+            )
+        except (NotImplementedError, RuntimeError):
+            # Fallback: dequantize FP8 → high precision, use _grouped_mm.
+            A_hp = A.dequantize() if a_pre_quantized else padded_A
+            B_hp = B_t.dequantize() if pre_quantized else B_t
+            output = torch._grouped_mm(A_hp, B_hp, offs=padded_group_end_offsets)
 
         # Unpad output if padding was used
         if pad_token_groups_for_grouped_mm:

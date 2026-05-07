@@ -1,0 +1,115 @@
+{
+  "model": "deepseek_v3",
+  "model_class": "DeepseekV3ForCausalLM",
+  "config_class": "DeepseekV3Config",
+  "is_gptoss": false,
+  "device": "xpu",
+  "seq_len": 16,
+  "passed": true,
+  "errors": [],
+  "baseline_shape": [
+    1,
+    16,
+    1000
+  ],
+  "baseline_abs_max": 1.25,
+  "quantization": {
+    "experts": [
+      {
+        "name": "model.layers.0.mlp.experts",
+        "params": {
+          "gate_up_proj": {
+            "shape": [
+              256,
+              256,
+              384
+            ],
+            "is_woq": true,
+            "dtype": "torch.bfloat16"
+          },
+          "down_proj": {
+            "shape": [
+              256,
+              192,
+              256
+            ],
+            "is_woq": true,
+            "dtype": "torch.bfloat16"
+          }
+        }
+      },
+      {
+        "name": "model.layers.1.mlp.experts",
+        "params": {
+          "gate_up_proj": {
+            "shape": [
+              256,
+              256,
+              384
+            ],
+            "is_woq": true,
+            "dtype": "torch.bfloat16"
+          },
+          "down_proj": {
+            "shape": [
+              256,
+              192,
+              256
+            ],
+            "is_woq": true,
+            "dtype": "torch.bfloat16"
+          }
+        }
+      },
+      {
+        "name": "model.layers.2.mlp.experts",
+        "params": {
+          "gate_up_proj": {
+            "shape": [
+              256,
+              256,
+              384
+            ],
+            "is_woq": true,
+            "dtype": "torch.bfloat16"
+          },
+          "down_proj": {
+            "shape": [
+              256,
+              192,
+              256
+            ],
+            "is_woq": true,
+            "dtype": "torch.bfloat16"
+          }
+        }
+      }
+    ]
+  },
+  "num_experts_patched": 3,
+  "expected_shape": [
+    1,
+    16,
+    1000
+  ],
+  "expected_abs_max": 1.2422,
+  "dispatch": {
+    "float8_grouped_mm_count": 6,
+    "expected_count": 6,
+    "dispatch_correct": true
+  },
+  "accuracy": {
+    "sqnr_db": 31.13,
+    "cosine_similarity": 0.999615,
+    "max_abs_error": 0.102783,
+    "mean_abs_error": 0.004896
+  },
+  "thresholds": {
+    "sqnr_threshold": 18.0,
+    "sqnr_pass": true,
+    "cosine_threshold": 0.99,
+    "cosine_pass": true,
+    "dispatch_pass": true
+  },
+  "elapsed_seconds": 0.63
+}
