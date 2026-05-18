@@ -1104,18 +1104,14 @@ def mx_wait_tensor(func, types, args, kwargs):
 @implements([aten._grouped_mm.default])
 def mx_grouped_mm(func, types, args, kwargs):
     """Handles torch._grouped_mm when weight (mat_b) is an MXTensor.
-
-    Weight-only and EMULATED modes dequantize directly. AUTO mode
-    quantizes activation and uses F.scaled_grouped_mm.
     """
     mat_a, mat_b = args[0], args[1]
     offs = args[2] if len(args) > 2 else kwargs.get("offs", None)
     assert isinstance(mat_b, MXTensor)
-    assert offs is not None, "offs is required for _grouped_mm"
+    assert offs is not None, "offs is required for MXTensor grouped_mm"
 
     act_quant_kwargs = mat_b.act_quant_kwargs
 
-    # Weight-only: dequantize weight, run bf16 grouped_mm
     if act_quant_kwargs is None:
         return torch._grouped_mm(mat_a, mat_b.dequantize(mat_b.orig_dtype), offs=offs)
 
@@ -1134,7 +1130,6 @@ def mx_grouped_mm(func, types, args, kwargs):
         is_swizzled_scales=k.is_swizzled_scales,
     )
 
-    # Weight must be transposed: model stores (E, N, K), forward does .transpose(-2, -1)
     assert mat_b.qdata.stride(-2) < mat_b.qdata.stride(-1), (
         "_grouped_mm requires weight.transpose(-2, -1)"
     )
@@ -1150,10 +1145,6 @@ def mx_grouped_mm(func, types, args, kwargs):
 
     use_swizzled = mat_a_mx.is_swizzled_scales or mat_b.is_swizzled_scales
 
-    # mx_transpose already transposed scale to match the transposed data,
-    # so mat_b.scale is already in the correct (E, K/bs, N) layout.
-    # .contiguous() is needed because mx_transpose produces a non-contiguous
-    # view and some kernels assume contiguous scale memory layout.
     a_scale = mat_a_mx.scale
     b_scale = mat_b.scale.contiguous()
     swizzle = SwizzleType.SWIZZLE_32_4_4 if use_swizzled else None
