@@ -38,7 +38,7 @@ if torch_version_at_least("2.12.0.dev0"):
 
 # ScalingType and SwizzleType are only available in PyTorch 2.10+
 if torch_version_at_least("2.10.0"):
-    from torch.nn.functional import ScalingType, SwizzleType
+    from torch.nn.functional import ScalingType, SwizzleType, scaled_grouped_mm
 
 from torchao.prototype.mx_formats.config import (
     MXFP8Dim0CastKernelChoice,
@@ -438,10 +438,10 @@ def to_dtype(
     # if the underlying data is transposed, convert to row major before
     # unpacking and unscaling
     if is_transposed:
-        data_lp = data_lp.t()
-        scale_e8m0 = scale_e8m0.t()
+        data_lp = data_lp.transpose(-2, -1)
+        scale_e8m0 = scale_e8m0.transpose(-2, -1)
         assert data_lp.is_contiguous()
-        orig_shape = (orig_shape[1], orig_shape[0])
+        orig_shape = (*orig_shape[:-2], orig_shape[-1], orig_shape[-2])
 
     if elem_dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
         data_hp = data_lp.to(target_dtype)
@@ -472,7 +472,7 @@ def to_dtype(
 
     # if we converted to row-major before unscaling convert back
     if is_transposed:
-        data_hp = data_hp.t()
+        data_hp = data_hp.transpose(-2, -1)
 
     return data_hp
 
@@ -903,6 +903,25 @@ def mx_t(func, types, args, kwargs):
     return new
 
 
+@implements([aten.transpose.int])
+def mx_transpose(func, types, args, kwargs):
+    old, dim0, dim1 = args
+    assert len(old.shape) == 3, f"unsupported rank {len(old.shape)}"
+    valid_3d_dims = ((1, 2), (2, 1), (-1, -2), (-2, -1))
+    assert (dim0, dim1) in valid_3d_dims, f"transpose unsupported for {dim0=} {dim1=}"
+    new = MXTensor(
+        func(old.qdata, dim0, dim1, **kwargs),
+        func(old.scale, dim0, dim1, **kwargs),
+        old.elem_dtype,
+        old.block_size,
+        old.orig_dtype,
+        old.kernel_preference,
+        old.act_quant_kwargs,
+        old.is_swizzled_scales,
+    )
+    return new
+
+
 @implements([aten.sum.dim_IntList])
 def mx_cast_up_op(func, types, args, kwargs):
     """Be careful with this function, this is a "fallback" op that
@@ -1079,4 +1098,75 @@ def mx_wait_tensor(func, types, args, kwargs):
         mx_tensor.kernel_preference,
         mx_tensor.act_quant_kwargs,
         mx_tensor.is_swizzled_scales,
+    )
+
+
+@implements([aten._grouped_mm.default])
+def mx_grouped_mm(func, types, args, kwargs):
+    """Handles torch._grouped_mm when weight (mat_b) is an MXTensor.
+
+    Weight-only and EMULATED modes dequantize directly. AUTO mode
+    quantizes activation and uses F.scaled_grouped_mm.
+    """
+    mat_a, mat_b = args[0], args[1]
+    offs = args[2] if len(args) > 2 else kwargs.get("offs", None)
+    assert isinstance(mat_b, MXTensor)
+    assert offs is not None, "offs is required for _grouped_mm"
+
+    act_quant_kwargs = mat_b.act_quant_kwargs
+
+    # Weight-only: dequantize weight, run bf16 grouped_mm
+    if act_quant_kwargs is None:
+        return torch._grouped_mm(mat_a, mat_b.dequantize(mat_b.orig_dtype), offs=offs)
+
+    # EMULATED: dequantize weight, run bf16 grouped_mm (no activation quantization)
+    k = act_quant_kwargs
+    if k.kernel_preference == KernelPreference.EMULATED:
+        return torch._grouped_mm(mat_a, mat_b.dequantize(mat_b.orig_dtype), offs=offs)
+
+    # AUTO: quantize activation, use scaled_grouped_mm
+    mat_a_mx = MXTensor.to_mx(
+        mat_a,
+        k.elem_dtype,
+        k.block_size,
+        k.scaling_mode,
+        k.kernel_preference,
+        is_swizzled_scales=k.is_swizzled_scales,
+    )
+
+    # Weight must be transposed: model stores (E, N, K), forward does .transpose(-2, -1)
+    assert mat_b.qdata.stride(-2) < mat_b.qdata.stride(-1), (
+        "_grouped_mm requires weight.transpose(-2, -1)"
+    )
+
+    is_fp4 = mat_b.elem_dtype == torch.float4_e2m1fn_x2
+
+    if is_fp4:
+        a_qdata = mat_a_mx.qdata.view(torch.float4_e2m1fn_x2)
+        b_qdata = mat_b.qdata.view(torch.float4_e2m1fn_x2)
+    else:
+        a_qdata = mat_a_mx.qdata
+        b_qdata = mat_b.qdata
+
+    use_swizzled = mat_a_mx.is_swizzled_scales or mat_b.is_swizzled_scales
+
+    # mx_transpose already transposed scale to match the transposed data,
+    # so mat_b.scale is already in the correct (E, K/bs, N) layout.
+    # .contiguous() is needed because mx_transpose produces a non-contiguous
+    # view and some kernels assume contiguous scale memory layout.
+    a_scale = mat_a_mx.scale
+    b_scale = mat_b.scale.contiguous()
+    swizzle = SwizzleType.SWIZZLE_32_4_4 if use_swizzled else None
+
+    return scaled_grouped_mm(
+        a_qdata,
+        b_qdata,
+        scale_a=a_scale.view(torch.float8_e8m0fnu),
+        scale_recipe_a=ScalingType.BlockWise1x32,
+        scale_b=b_scale.view(torch.float8_e8m0fnu),
+        scale_recipe_b=ScalingType.BlockWise1x32,
+        swizzle_a=swizzle,
+        swizzle_b=swizzle,
+        offs=offs,
+        output_dtype=mat_a.dtype,
     )
