@@ -27,6 +27,9 @@ from torchao.utils import (
     is_sm_at_least_100,
 )
 
+if torch.xpu.is_available():
+    from torchao.prototype.mx_formats import xpu  # noqa: F401
+
 torch.manual_seed(2)
 
 

@@ -13,7 +13,15 @@ from torch.nn.functional import ScalingType, SwizzleType
 from torchao.float8.float8_utils import compute_error
 from torchao.prototype.mx_formats.mx_tensor import MXTensor
 from torchao.prototype.mx_formats.utils import to_blocked
-from torchao.utils import is_sm_at_least_100
+from torchao.utils import get_ao_tensor, is_sm_at_least_100
+
+if torch.xpu.is_available():
+    from torchao.prototype.mx_formats import xpu  # noqa: F401
+
+
+def _get_mx_cls(device):
+    """Get the device-appropriate MXTensor class."""
+    return get_ao_tensor(MXTensor, device)
 
 
 def _mxfp4_scaled_mm(a_data, b_data, a_scale_block, b_scale_block):
@@ -34,6 +42,7 @@ def _mxfp4_scaled_mm(a_data, b_data, a_scale_block, b_scale_block):
 def run_matrix_test(M: int, K: int, N: int, format, device="cuda") -> float:
     dtype = torch.bfloat16
     is_xpu = device == "xpu"
+    mx_cls = _get_mx_cls(device)
 
     a = torch.rand((M, K), dtype=dtype, device=device)
     b = torch.rand((N, K), dtype=dtype, device=device)
@@ -48,8 +57,8 @@ def run_matrix_test(M: int, K: int, N: int, format, device="cuda") -> float:
             else _mxfp4_scaled_mm
         )
 
-    a_mx = MXTensor.to_mx(a, fmt, 32)
-    b_mx = MXTensor.to_mx(b, fmt, 32)
+    a_mx = mx_cls.to_mx(a, fmt, 32)
+    b_mx = mx_cls.to_mx(b, fmt, 32)
 
     a_data = a_mx.qdata
     b_data = b_mx.qdata

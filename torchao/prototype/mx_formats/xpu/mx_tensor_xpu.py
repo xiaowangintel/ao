@@ -10,16 +10,38 @@ from torchao.prototype.mx_formats.mx_tensor import (
     QuantizeTensorToMXKwargs,
     _addmm_mx_dispatch,
     _get_gemm_choice,
-    register_mx_tensor_class,
+    tensor_size_hp_to_fp4x2,
     to_mx,
 )
+from torchao.prototype.mx_formats.utils import _swizzle_aware_slice
 from torchao.quantization.quantize_.common.kernel_preference import KernelPreference
+from torchao.utils import (
+    fill_defaults,
+    register_ao_tensor,
+    return_and_correct_aliasing,
+)
 
 aten = torch.ops.aten
 
 
 class MXTensorXPU(MXTensor):
     """MXTensor subclass for Intel XPU: no scale swizzling, device-specific gemm."""
+
+    def __reduce_ex__(self, protocol):
+        """Serialize as MXTensor for device-agnostic checkpoints."""
+        return (
+            MXTensor,
+            (
+                self.qdata,
+                self.scale,
+                self.elem_dtype,
+                self.block_size,
+                self.orig_dtype,
+                self.kernel_preference,
+                self.act_quant_kwargs,
+                self.is_swizzled_scales,
+            ),
+        )
 
     @staticmethod
     @torch._dynamo.allow_in_graph
@@ -136,8 +158,121 @@ def xpu_mx_linear(func, types, args, kwargs):
     return res.view(*orig_shape[:-1], res.shape[-1])
 
 
-# Register XPU class
-register_mx_tensor_class("xpu", MXTensorXPU)
+# Override structural ops to preserve MXTensorXPU type
 
-# Allow safe serialization
-torch.serialization.add_safe_globals([MXTensorXPU])
+
+@xpu_implements([aten._pin_memory.default])
+def xpu_mx_pin_memory(func, types, args, kwargs):
+    tensor = args[0]
+    return MXTensorXPU(
+        tensor.qdata.pin_memory(),
+        tensor.scale.pin_memory(),
+        tensor.elem_dtype,
+        tensor.block_size,
+        tensor.orig_dtype,
+        tensor.kernel_preference,
+        tensor.act_quant_kwargs,
+        tensor.is_swizzled_scales,
+    )
+
+
+@xpu_implements([aten.t.default])
+def xpu_mx_t(func, types, args, kwargs):
+    old = args[0]
+    return MXTensorXPU(
+        old.qdata.t(),
+        old.scale.t(),
+        old.elem_dtype,
+        old.block_size,
+        old.orig_dtype,
+        old.kernel_preference,
+        old.act_quant_kwargs,
+        old.is_swizzled_scales,
+    )
+
+
+@xpu_implements([aten.view.default])
+def xpu_mx_view_op(func, types, args, kwargs):
+    data = args[0].qdata
+    new_size = args[1]
+    if args[0].elem_dtype == torch.float4_e2m1fn_x2:
+        new_size = tensor_size_hp_to_fp4x2(new_size, data.is_contiguous())
+    new_data = func(data, new_size, *args[2:], **kwargs)
+    return MXTensorXPU(
+        new_data,
+        args[0].scale,
+        args[0].elem_dtype,
+        args[0].block_size,
+        args[0].orig_dtype,
+        args[0].kernel_preference,
+        args[0].act_quant_kwargs,
+        args[0].is_swizzled_scales,
+    )
+
+
+@xpu_implements([aten.slice.Tensor])
+def xpu_mx_slice(func, types, args, kwargs):
+    x, dim, start, end, step = fill_defaults(args, 5, [0, None, None, 1])
+    if step != 1:
+        raise ValueError("Only support aten.slice with step=1")
+    sliced_data, sliced_scale = _swizzle_aware_slice(x, dim, start, end, step)
+    return return_and_correct_aliasing(
+        func,
+        args,
+        kwargs,
+        MXTensorXPU(
+            sliced_data,
+            sliced_scale,
+            x.elem_dtype,
+            x.block_size,
+            x.orig_dtype,
+            x.kernel_preference,
+            x.act_quant_kwargs,
+            x.is_swizzled_scales,
+        ),
+    )
+
+
+@xpu_implements([torch.ops._c10d_functional.all_gather_into_tensor.default])
+def xpu_mx_all_gather(func, types, args, kwargs):
+    mx_tensor = args[0]
+    group_tag = args[1]
+    gathered_qdata = func(mx_tensor.qdata, group_tag, *args[2:], **kwargs)
+    scale_uint8 = mx_tensor.scale.view(torch.uint8)
+    gathered_scale = func(scale_uint8, group_tag, *args[2:], **kwargs)
+    gathered_scale = gathered_scale.view(torch.float8_e8m0fnu)
+    return MXTensorXPU(
+        gathered_qdata,
+        gathered_scale,
+        mx_tensor.elem_dtype,
+        mx_tensor.block_size,
+        mx_tensor.orig_dtype,
+        mx_tensor.kernel_preference,
+        mx_tensor.act_quant_kwargs,
+        mx_tensor.is_swizzled_scales,
+    )
+
+
+@xpu_implements([torch.ops._c10d_functional.wait_tensor.default])
+def xpu_mx_wait_tensor(func, types, args, kwargs):
+    mx_tensor = args[0]
+    waited_qdata = torch.ops._c10d_functional.wait_tensor.default(
+        mx_tensor.qdata, *args[1:], **kwargs
+    )
+    waited_scale = torch.ops._c10d_functional.wait_tensor.default(
+        mx_tensor.scale, *args[1:], **kwargs
+    )
+    return MXTensorXPU(
+        waited_qdata,
+        waited_scale,
+        mx_tensor.elem_dtype,
+        mx_tensor.block_size,
+        mx_tensor.orig_dtype,
+        mx_tensor.kernel_preference,
+        mx_tensor.act_quant_kwargs,
+        mx_tensor.is_swizzled_scales,
+    )
+
+
+# Register XPU class
+register_ao_tensor(MXTensor, "xpu", MXTensorXPU)

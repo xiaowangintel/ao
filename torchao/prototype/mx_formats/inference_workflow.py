@@ -19,7 +19,6 @@ from torchao.prototype.mx_formats.mx_tensor import (
     MXTensor,
     QuantizeTensorToMXKwargs,
     ScaleCalculationMode,
-    get_mx_tensor_class,
 )
 from torchao.prototype.mx_formats.nvfp4_tensor import (
     NVFP4Tensor,
@@ -32,7 +31,7 @@ from torchao.quantization.transform_module import (
     register_quantize_module_handler,
 )
 from torchao.quantization.utils import _module_extra_repr, _quantization_type
-from torchao.utils import is_sm_at_least_100
+from torchao.utils import get_ao_tensor, is_sm_at_least_100
 
 
 class NVFP4ObservedLinear(torch.nn.Linear):
@@ -137,13 +136,9 @@ def _mx_inference_linear_transform(
         f"Only supporting bf16 out dtype for now, got {weight.dtype}"
     )
 
-    # Lazy-load device-specific backends
-    device_type = weight.device.type
-    if device_type == "xpu":
-        import torchao.prototype.mx_formats.xpu  # noqa: F401
-
     # Select device-appropriate MXTensor class
-    mx_cls = get_mx_tensor_class(device_type)
+    device_type = weight.device.type
+    mx_cls = get_ao_tensor(MXTensor, device_type)
 
     act_quant_kwargs = QuantizeTensorToMXKwargs(
         elem_dtype=config.activation_dtype,

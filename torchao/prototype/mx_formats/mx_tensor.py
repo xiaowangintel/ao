@@ -19,7 +19,7 @@ Exponent E8M0 encoding details (OCP spec section 5.4.1):
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Type, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -96,19 +96,6 @@ EBITS_F8_E5M2, MBITS_F8_E5M2 = 5, 2
 
 _TORCH_VERSION_AT_LEAST_2_13 = torch_version_at_least("2.13.0.dev0")
 _TORCH_VERSION_AT_LEAST_2_14 = torch_version_at_least("2.14.0.dev0")
-
-# Device-specific MXTensor class registry
-_MX_TENSOR_REGISTRY: Dict[str, Type] = {}
-
-
-def register_mx_tensor_class(device_type: str, cls: Type) -> None:
-    """Register a device-specific MXTensor subclass."""
-    _MX_TENSOR_REGISTRY[device_type] = cls
-
-
-def get_mx_tensor_class(device_type: str):
-    """Get the MXTensor class for a given device type. Falls back to MXTensor."""
-    return _MX_TENSOR_REGISTRY.get(device_type, MXTensor)
 
 
 @dataclass
@@ -718,7 +705,7 @@ def mx_is_pinned(func, types, args, kwargs):
 @implements([aten._pin_memory.default])
 def mx_pin_memory(func, types, args, kwargs):
     tensor = args[0]
-    return type(tensor)(
+    return MXTensor(
         tensor.qdata.pin_memory(),
         tensor.scale.pin_memory(),
         tensor.elem_dtype,
@@ -780,7 +767,7 @@ def _addmm_mx_dispatch(
     if not isinstance(a, MXTensor):
         assert b.act_quant_kwargs is not None, "weight-only quant not yet supported"
         k = b.act_quant_kwargs
-        a = type(b).to_mx(
+        a = MXTensor.to_mx(
             a,
             k.elem_dtype,
             k.block_size,
@@ -899,7 +886,7 @@ def mx_linear(func, types, args, kwargs):
 def mx_t(func, types, args, kwargs):
     # For now, only transpose(input, 0, 1) is supported.
     old = args[0]
-    new = type(old)(
+    new = MXTensor(
         old.qdata.t(),
         old.scale.t(),
         old.elem_dtype,
@@ -940,7 +927,7 @@ def mx_view_op(func, types, args, kwargs):
         # special case fp4 as we pack two elements per byte
         new_size = tensor_size_hp_to_fp4x2(new_size, data.is_contiguous())
     new_data = func(data, new_size, *args[2:], **kwargs)
-    return type(args[0])(
+    return MXTensor(
         new_data,
         args[0].scale,
         args[0].elem_dtype,
@@ -965,7 +952,7 @@ def mx_slice(func, types, args, kwargs):
         func,
         args,
         kwargs,
-        type(x)(
+        MXTensor(
             sliced_data,
             sliced_scale,
             x.elem_dtype,
@@ -1048,7 +1035,7 @@ def mx_all_gather(func, types, args, kwargs):
     gathered_scale = gathered_scale.view(torch.float8_e8m0fnu)
 
     # Return new MXTensor with gathered data
-    return type(mx_tensor)(
+    return MXTensor(
         gathered_qdata,
         gathered_scale,
         mx_tensor.elem_dtype,
@@ -1079,7 +1066,7 @@ def mx_wait_tensor(func, types, args, kwargs):
         mx_tensor.scale, *args[1:], **kwargs
     )
 
-    return type(mx_tensor)(
+    return MXTensor(
         waited_qdata,
         waited_scale,
         mx_tensor.elem_dtype,

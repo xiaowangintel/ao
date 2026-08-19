@@ -11,7 +11,7 @@ import time
 from functools import reduce
 from importlib.metadata import version
 from math import gcd
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Type, Union
 
 import torch
 import torch.nn.utils.parametrize as parametrize
@@ -715,6 +715,26 @@ def _get_to_kwargs(self, *args, **kwargs):
         "non_blocking": non_blocking,
     }
     return kwargs
+
+
+# Device-specific tensor subclass registry
+# Maps (base_tensor_class, device_type) to device-specific subclass
+_AOTENSOR_TABLE: Dict[Type, Dict[str, Type]] = {}
+
+
+def register_ao_tensor(base_cls: Type, device_type: str, device_cls: Type) -> None:
+    """Register a device-specific tensor for a base tensor type.
+
+    Similar to PyTorch's torch.library.impl for kernel registration.
+    """
+    if base_cls not in _AOTENSOR_TABLE:
+        _AOTENSOR_TABLE[base_cls] = {}
+    _AOTENSOR_TABLE[base_cls][device_type] = device_cls
+
+
+def get_ao_tensor(base_cls: Type, device_type: str) -> Type:
+    """Get the device-specific tensor for a base tensor type. Falls back to base_cls."""
+    return _AOTENSOR_TABLE.get(base_cls, {}).get(device_type, base_cls)
 
 
 class TorchAOBaseTensor(torch.Tensor):
