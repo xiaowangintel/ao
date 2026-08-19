@@ -19,6 +19,7 @@ from torchao.prototype.mx_formats.mx_tensor import (
     MXTensor,
     QuantizeTensorToMXKwargs,
     ScaleCalculationMode,
+    get_mx_tensor_class,
 )
 from torchao.prototype.mx_formats.nvfp4_tensor import (
     NVFP4Tensor,
@@ -135,6 +136,15 @@ def _mx_inference_linear_transform(
     assert weight.dtype == torch.bfloat16, (
         f"Only supporting bf16 out dtype for now, got {weight.dtype}"
     )
+
+    # Lazy-load device-specific backends
+    device_type = weight.device.type
+    if device_type == "xpu":
+        import torchao.prototype.mx_formats.xpu  # noqa: F401
+
+    # Select device-appropriate MXTensor class
+    mx_cls = get_mx_tensor_class(device_type)
+
     act_quant_kwargs = QuantizeTensorToMXKwargs(
         elem_dtype=config.activation_dtype,
         block_size=config.block_size,
@@ -144,7 +154,7 @@ def _mx_inference_linear_transform(
     )
 
     # Convert weight to MX Tensor
-    quantized_weight = MXTensor.to_mx(
+    quantized_weight = mx_cls.to_mx(
         weight,
         config.weight_dtype,
         block_size=config.block_size,
