@@ -27,22 +27,6 @@ aten = torch.ops.aten
 class MXTensorXPU(MXTensor):
     """MXTensor subclass for Intel XPU: no scale swizzling, device-specific gemm."""
 
-    def __reduce_ex__(self, protocol):
-        """Serialize as MXTensor for device-agnostic checkpoints."""
-        return (
-            MXTensor,
-            (
-                self.qdata,
-                self.scale,
-                self.elem_dtype,
-                self.block_size,
-                self.orig_dtype,
-                self.kernel_preference,
-                self.act_quant_kwargs,
-                self.is_swizzled_scales,
-            ),
-        )
-
     @staticmethod
     @torch._dynamo.allow_in_graph
     def to_mx(
@@ -276,3 +260,6 @@ def xpu_mx_wait_tensor(func, types, args, kwargs):
 
 # Register XPU class
 register_ao_tensor(MXTensor, "xpu", MXTensorXPU)
+
+# Allow safe serialization
+torch.serialization.add_safe_globals([MXTensorXPU])

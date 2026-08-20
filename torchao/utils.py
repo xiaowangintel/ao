@@ -717,24 +717,26 @@ def _get_to_kwargs(self, *args, **kwargs):
     return kwargs
 
 
-# Device-specific tensor subclass registry
-# Maps (base_tensor_class, device_type) to device-specific subclass
+# Device-specific tensor registry
+# Maps (generic_tensor_type, device_type) to specific_tensor_type
 _AOTENSOR_TABLE: Dict[Type, Dict[str, Type]] = {}
 
 
-def register_ao_tensor(base_cls: Type, device_type: str, device_cls: Type) -> None:
-    """Register a device-specific tensor for a base tensor type.
+def register_ao_tensor(
+    generic_type: Type, device: str, specific_type: Type
+) -> None:
+    """Register a device-specific tensor for a generic tensor type.
 
     Similar to PyTorch's torch.library.impl for kernel registration.
     """
-    if base_cls not in _AOTENSOR_TABLE:
-        _AOTENSOR_TABLE[base_cls] = {}
-    _AOTENSOR_TABLE[base_cls][device_type] = device_cls
+    if generic_type not in _AOTENSOR_TABLE:
+        _AOTENSOR_TABLE[generic_type] = {}
+    _AOTENSOR_TABLE[generic_type][device] = specific_type
 
 
-def get_ao_tensor(base_cls: Type, device_type: str) -> Type:
-    """Get the device-specific tensor for a base tensor type. Falls back to base_cls."""
-    return _AOTENSOR_TABLE.get(base_cls, {}).get(device_type, base_cls)
+def get_ao_tensor(generic_type: Type, device: str) -> Type:
+    """Get the device-specific tensor for a generic tensor type. Falls back to generic_type."""
+    return _AOTENSOR_TABLE.get(generic_type, {}).get(device, generic_type)
 
 
 class TorchAOBaseTensor(torch.Tensor):

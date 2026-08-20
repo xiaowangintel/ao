@@ -61,9 +61,10 @@ def test_serialization(recipe_name):
 
     assert fname is not None
 
+    xpu_import = "\nimport torchao.prototype.mx_formats.xpu" if device == "xpu" else ""
     code = f"""
 import torch
-import torchao.prototype.mx_formats
+import torchao.prototype.mx_formats{xpu_import}
 _ = torch.load('{fname}', weights_only=True)
     """
 
