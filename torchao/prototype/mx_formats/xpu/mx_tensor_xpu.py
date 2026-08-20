@@ -84,7 +84,6 @@ def _xpu_addmm_dispatch(a, b, aten_op, bias=None):
     b_scale = b.scale.t().view(N, K // 32)
 
     if a.elem_dtype == torch.float8_e4m3fn:
-        print("====================xpu e4m3")
         assert b.elem_dtype == torch.float8_e4m3fn
         a_scale_e8m0 = a_scale.view(torch.float8_e8m0fnu)
         b_scale_e8m0 = b_scale.view(torch.float8_e8m0fnu).t().contiguous()
@@ -97,7 +96,6 @@ def _xpu_addmm_dispatch(a, b, aten_op, bias=None):
             out_dtype=torch.bfloat16,
         )
     else:
-        print("====================xpu e2m1")
         assert a.elem_dtype == torch.float4_e2m1fn_x2
         assert b.elem_dtype == torch.float4_e2m1fn_x2
         return F.scaled_mm(
