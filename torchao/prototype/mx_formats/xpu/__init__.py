@@ -1,4 +1,4 @@
-"""Intel XPU MXTensor subclass for MX format inference."""
+"""Intel XPU MXTensor subclass for MX format."""
 
 from torchao.prototype.mx_formats.xpu.mx_tensor_xpu import MXTensorXPU
 
